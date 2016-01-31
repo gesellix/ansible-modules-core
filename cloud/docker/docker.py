@@ -659,6 +659,7 @@ class DockerManager(object):
 
         self.env = self.module.params.get('env', None)
         self.env_file = self.module.params.get('env_file', None)
+        self.environment = self.get_environment(self.env, self.env_file)
 
         # Connect to the docker server using any configured host and TLS settings.
 
@@ -781,6 +782,24 @@ class DockerManager(object):
                     self._cap_ver_req[capability][1],
                     '.'.join(map(str, self.docker_py_versioninfo)),
                     api_version))
+
+    def get_environment(self, env, env_file):
+        """
+        If environment files are combined with explicit environment variables, the explicit environment variables will override the KW from the env file.
+        """
+        final_env = {}
+
+        if env_file:
+            parsed_env_file = docker.utils.parse_env_file(env_file)
+
+            for name, value in parsed_env_file.iteritems():
+                final_env[name] = str(value)
+
+        if env:
+            for name, value in env.iteritems():
+                final_env[name] = str(value)
+
+        return final_env
 
     def get_links(self, links):
         """
@@ -1110,8 +1129,6 @@ class DockerManager(object):
             # ENVIRONMENT
             # actual_env is likely to include environment variables injected by
             # the Dockerfile.
-            # If environment files are combined with explicit environment variables,
-            # the explicit environment variables will override the KW from the env file.
 
             expected_env = {}
 
@@ -1119,14 +1136,8 @@ class DockerManager(object):
                 name, value = image_env.split('=', 1)
                 expected_env[name] = value
 
-            if self.env_file:
-                parse_env_file = docker.utils.parse_env_file(self.env_file)
-
-                for name, value in parse_env_file.iteritems():
-                    expected_env[name] = str(value)
-
-            if self.env:
-                for name, value in self.env.iteritems():
+            if self.environment:
+                for name, value in self.environment.iteritems():
                     expected_env[name] = str(value)
 
             actual_env = {}
@@ -1430,7 +1441,7 @@ class DockerManager(object):
                   'command':      self.module.params.get('command'),
                   'ports':        self.exposed_ports,
                   'volumes':      self.volumes,
-                  'environment':  self.env,
+                  'environment':  self.environment,
                   'hostname':     self.module.params.get('hostname'),
                   'domainname':   self.module.params.get('domainname'),
                   'detach':       self.module.params.get('detach'),
